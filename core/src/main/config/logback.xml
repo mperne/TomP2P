@@ -35,12 +35,12 @@
   
   <!--  <logger name="net.tomp2p.p2p.DefaultBroadcastHandler" level="TRACE"/> -->
   <!--  <logger name="net.tomp2p.p2p.DefaultTrackerReplication" level="TRACE"/> -->
-  <logger name="net.tomp2p.p2p.DistributedHashTable" level="TRACE"/>
+<!--  <logger name="net.tomp2p.p2p.DistributedHashTable" level="TRACE"/> -->
   <!--  <logger name="net.tomp2p.p2p.DistributedRouting" level="TRACE"/> -->
   <!--  <logger name="net.tomp2p.p2p.DistributedTask" level="TRACE"/> -->
   <!--  <logger name="net.tomp2p.p2p.DistributedTracker" level="TRACE"/> -->
   <!--  <logger name="net.tomp2p.p2p.Peer" level="TRACE"/> -->
-  <logger name="net.tomp2p.p2p.RoutingMechanism" level="TRACE"/>
+<!--   <logger name="net.tomp2p.p2p.RoutingMechanism" level="TRACE"/> -->
   <!--  <logger name="net.tomp2p.p2p.Statistics" level="TRACE"/> -->
   
   <!--  <logger name="net.tomp2p.peers.PeerMapKadImpl" level="TRACE"/> -->
@@ -59,7 +59,7 @@
   <!--  <logger name="net.tomp2p.rpc.PeerExchangeRPC" level="TRACE"/> -->
   <!--  <logger name="net.tomp2p.rpc.SenderCacheStrategy" level="TRACE"/> -->
   
-  <logger name="net.tomp2p.rpc.StorageRPC" level="TRACE"/>
+<!--  <logger name="net.tomp2p.rpc.QuitRPC" level="TRACE"/> -->
   <!--  <logger name="net.tomp2p.rpc.HandshakeRPC" level="TRACE"/> -->
   <!--  <logger name="net.tomp2p.rpc.TaskRPC" level="TRACE"/> -->
   
@@ -75,7 +75,8 @@
  
   <!-- default is OFF, options are: TRACE, DEBUG, INFO, WARN, ERROR, OFF. 
        See http://logback.qos.ch/manual/architecture.html for more information-->
-  <root level="WARN">
+<!--  <root level="WARN"> -->
+  <root level="OFF">
     <appender-ref ref="STDOUT" />
   </root>
 </configuration>
