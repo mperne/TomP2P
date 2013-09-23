@@ -56,7 +56,8 @@ public class Message2 {
      */
     public enum Content {
         EMPTY, KEY, MAP_KEY480_DATA, MAP_KEY480_KEY, SET_KEY480, SET_NEIGHBORS, BYTE_BUFFER, 
-        LONG, INTEGER, PUBLIC_KEY_SIGNATURE, SET_TRACKER_DATA, BLOOM_FILTER, USER1, USER2, USER3, USER4
+        LONG, INTEGER, PUBLIC_KEY_SIGNATURE, SET_TRACKER_DATA, BLOOM_FILTER, USER1, USER2, USER3, USER4,
+        STRING
     };
 
     /**
@@ -133,6 +134,7 @@ public class Message2 {
     private List<KeysMap> keysMapList = null;
     private List<Buffer> bufferList = null;
     private List<TrackerData> trackerDataList = null;
+//    private List<String> stringList = null;
 
     // this will not be transferred, status variables
     private transient boolean presetContentTypes = false;
@@ -784,7 +786,7 @@ public class Message2 {
     @Override
     public String toString() {
         final StringBuilder sb = new StringBuilder("Message:id=");
-        sb.append(getMessageId()).append(",t=").append(type.toString()).append(",c=").append(command);
+        sb.append(getMessageId()).append(",t=").append(type.toString()).append(",c=").append(command).append(",r=").append(getRecipient());
         /*
          * sb.append(",c=").append(getCommand().toString()).append(",t=").append(type.toString()).append(",l=")
          * .append(getLength() + MessageCodec.HEADER_SIZE).append(",s=").append(getSender()).append(",r=")
@@ -928,8 +930,32 @@ public class Message2 {
         // set data maps
         return true;
     }
-
-   
+    
+//    public Message2 setString(final String string) {
+//        if (!presetContentTypes) {
+//            setContentType(Content.STRING);
+//        }
+//        if (stringList == null) {
+//            stringList = new ArrayList<String>(1);
+//        }
+//        this.stringList.add(string);
+//        return this;
+//    }
+//
+//    public List<String> getStringList() {
+//        if (stringList == null) {
+//            return Collections.emptyList();
+//        }
+//        return stringList;
+//    }
+//
+//    public String getString(final int index) {
+//        if (stringList == null || index > stringList.size() - 1) {
+//            return null;
+//        }
+//        return stringList.get(index);
+//    } 
+    
 
     
 }

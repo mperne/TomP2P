@@ -147,6 +147,10 @@ public class TomP2PCumulationTCP extends ChannelInboundHandlerAdapter {
         	//with windows we see the following message
         	return; // ignore
         }
+        else if(cause.getMessage().equals("An established connection was aborted by the software in your host machine")){
+        	//with windows we see the following message
+        	return; // ignore
+        }
         if (msg == null && decoder.lastContent() == null) {
             LOG.error("exception in decoding TCP, not started decoding", cause);
             cause.printStackTrace();

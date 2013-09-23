@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Timer;
+import java.util.TimerTask;
 
 import net.tomp2p.connection2.Bindings;
 import net.tomp2p.connection2.ChannelClientConfiguration;
@@ -39,6 +40,7 @@ import net.tomp2p.peers.PeerMap;
 import net.tomp2p.peers.PeerMapConfiguration;
 import net.tomp2p.peers.PeerStatusListener;
 import net.tomp2p.replication.Replication;
+import net.tomp2p.replication.ReplicationExecutor;
 import net.tomp2p.rpc.BloomfilterFactory;
 import net.tomp2p.rpc.BroadcastRPC;
 import net.tomp2p.rpc.DefaultBloomfilterFactory;
@@ -48,6 +50,7 @@ import net.tomp2p.rpc.PeerExchangeRPC;
 import net.tomp2p.rpc.PingRPC;
 import net.tomp2p.rpc.QuitRPC;
 import net.tomp2p.rpc.StorageRPC;
+import net.tomp2p.rpc.SynchronizationRPC;
 //import net.tomp2p.rpc.TaskRPC;
 import net.tomp2p.rpc.TrackerRPC;
 import net.tomp2p.storage.IdentityManagement;
@@ -144,6 +147,7 @@ public class PeerMaker {
     private boolean enableDirectDataRPC = true;
     private boolean enableTrackerRPC = true;
     private boolean enableTaskRPC = true;
+    private boolean enableSynchronizationRPC = true;
 
     // P2P
     private boolean enableRouting = true;
@@ -373,6 +377,11 @@ public class PeerMaker {
             BroadcastRPC broadcastRPC = new BroadcastRPC(peerBean, connectionBean, broadcastHandler);
             peer.setBroadcastRPC(broadcastRPC);
         }
+        
+        if (isEnableSynchronizationRPC()) {
+        	SynchronizationRPC synchronizationRPC = new SynchronizationRPC(peerBean, connectionBean);
+        	peer.setSynchronizationRPC(synchronizationRPC);
+        }
          
     }
 
@@ -403,13 +412,22 @@ public class PeerMaker {
          * //peer.setDistributedTask(distributedTask); } // maintenance if (isEnableMaintenance()) { //TODO: enable
          * again //connectionHandler // .getConnectionBean() // .getScheduler() //
          * .startMaintainance(peerBean.getPeerMap(), peer.getHandshakeRPC(), //
-         * connectionBean.getConnectionReservation(), 5); } // indirect replication //TODO: enable again //if
-         * (isEnableIndirectReplication() && isEnableStorageRPC()) { // if (replicationExecutor == null) { //
-         * replicationExecutor = new ReplicationExecutor(peer); // } // peer.getScheduledFutures().add( //
-         * connectionBean // .getScheduler() // .getScheduledExecutorServiceReplication() //
-         * .scheduleWithFixedDelay(replicationExecutor, replicationRefreshMillis, // replicationRefreshMillis,
-         * TimeUnit.MILLISECONDS)); //}
+         * connectionBean.getConnectionReservation(), 5); } 
          */
+         // indirect replication //TODO: enable again //
+        if (isEnableIndirectReplication() && isEnableStorageRPC()) { 
+        	//if (replicationExecutor == null) { //
+        		final ReplicationExecutor replicationExecutor = new ReplicationExecutor(peer);
+        		connectionBean.timer().scheduleAtFixedRate(new TimerTask() {
+					
+					@Override
+					public void run() {
+						replicationExecutor.run();
+						
+					}
+				}, 1000, 60 * 1000);
+        }
+         
     }
 
     public Number160 peerId() {
@@ -601,6 +619,15 @@ public class PeerMaker {
         this.enableTaskRPC = enableTaskRPC;
         return this;
     }
+    
+    public boolean isEnableSynchronizationRPC() {
+        return enableQuitRPC;
+    }
+
+    public PeerMaker setEnableSynchronizationRPC(boolean enableQuitRPC) {
+        this.enableQuitRPC = enableQuitRPC;
+        return this;
+    }    
 
     public boolean isEnableRouting() {
         return enableRouting;

@@ -265,13 +265,14 @@ public class TomP2POutbound extends ChannelOutboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(final ChannelHandlerContext ctx, final Throwable cause) throws Exception {
-        if (message == null) {
+    	if (message == null) {
             LOG.error("exception in encoding, starting", cause);
             cause.printStackTrace();
         } else if (message != null && !message.isDone()) {
             LOG.error("exception in encoding, started", cause);
             cause.printStackTrace();
         }
+        
     }
 
     /*

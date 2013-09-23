@@ -137,7 +137,7 @@ public class PutBuilder extends DHTBuilder<PutBuilder> {
         if (data != null) {
             getDataMap().put(getData().getKey(), getData().getValue());
         }
-        if (dataMap.size() == 0) {
+        if (dataMap.size() == 0 && dataMapConvert.size() == 0) {
             throw new IllegalArgumentException(
                     "You must either set data via setDataMap() or setData(). Cannot add nothing.");
         }
