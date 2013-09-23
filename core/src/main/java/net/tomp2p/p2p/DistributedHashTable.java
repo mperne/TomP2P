@@ -131,7 +131,7 @@ public class DistributedHashTable {
                             }
                         }
                     });
-                    Utils.addReleaseListener(future.getChannelCreator(), futureDHT);
+                    futureDHT.addFutureDHTReleaseListener(future.getChannelCreator());
                 } else {
                     futureDHT.setFailed(future);
                 }
@@ -210,7 +210,7 @@ public class DistributedHashTable {
                             }
                         }
                     });
-                    Utils.addReleaseListener(future.getChannelCreator(), futureDHT);
+                    futureDHT.addFutureDHTReleaseListener(future.getChannelCreator());
                     
                 } else {
                     futureDHT.setFailed(future);
@@ -248,8 +248,8 @@ public class DistributedHashTable {
                                             @Override
                                             public FutureResponse create(final ChannelCreator channelCreator,
                                                     final PeerAddress address) {
-                                                boolean protectEntry = Utils.checkEntryProtection(putBuilder
-                                                        .getDataMap());
+                                                //boolean protectEntry = Utils.checkEntryProtection(putBuilder
+                                                //        .getDataMap());
                                                 // TODO: content protection
                                                 boolean putIfAbsent = putBuilder.isPutIfAbsent();
                                                 if (putIfAbsent) {
@@ -281,7 +281,7 @@ public class DistributedHashTable {
                             }
                         }
                     });
-                    Utils.addReleaseListener(future.getChannelCreator(), futureDHT);
+                    futureDHT.addFutureDHTReleaseListener(future.getChannelCreator());
                 } else {
                     futureDHT.setFailed(future);
                 }
@@ -374,7 +374,7 @@ public class DistributedHashTable {
                             }
                         }
                     });
-                    Utils.addReleaseListener(future.getChannelCreator(), futureDHT);
+                    futureDHT.addFutureDHTReleaseListener(future.getChannelCreator());
                 } else {
                     futureDHT.setFailed(future);
                 }
@@ -450,9 +450,7 @@ public class DistributedHashTable {
                                 futureDHT.setFailed("routing failed");
                         }
                     });
-                    
-                    Utils.addReleaseListener(future.getChannelCreator(), futureDHT);
-                    
+                    futureDHT.addFutureDHTReleaseListener(future.getChannelCreator());
                 } else {
                     futureDHT.setFailed(future);
                 }
@@ -507,8 +505,7 @@ public class DistributedHashTable {
                                             future.isSuccess());
                                 }
                             });
-                    Utils.addReleaseListener(future.getChannelCreator(), futureShutdown);
-                    
+                    futureShutdown.addFutureDHTReleaseListener(future.getChannelCreator());
                 } else {
                     futureShutdown.setFailed(future);
                 }
