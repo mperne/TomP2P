@@ -20,8 +20,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.SortedSet;
-import java.util.Timer;
-import java.util.TimerTask;
 
 import net.tomp2p.peers.Number160;
 import net.tomp2p.peers.PeerAddress;
@@ -29,7 +27,6 @@ import net.tomp2p.peers.PeerMap;
 import net.tomp2p.peers.PeerMapChangeListener;
 import net.tomp2p.peers.PeerStatatistic;
 import net.tomp2p.storage.ReplicationStorage;
-import net.tomp2p.storage.StorageMemory;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,9 +46,6 @@ public class Replication implements PeerMapChangeListener {
     private final ReplicationStorage replicationStorage;
 
     private int replicationFactor;
-    
-    private AutomaticReplication automaticReplication;
-    private Timer automaticReplicationTimer;
 
     /**
      * Constructor.
@@ -72,27 +66,6 @@ public class Replication implements PeerMapChangeListener {
         this.peerMap = peerMap;
         this.replicationFactor = replicationFactor;
         peerMap.addPeerMapChangeListener(this);
-        
-        this.automaticReplication = new AutomaticReplication(0.98, this.peerMap);
-        this.automaticReplicationTimer = new Timer();
-//        if(replicationStorage.getClass().equals(StorageMemory.class))
-//        	adaptation();        
-    }
-    
-    public void adaptation() {
-		TimerTask task = new TimerTask() {
-			
-			@Override
-			public void run() {
-				int rf = automaticReplication.getReplicationFactor(selfAddress.getPeerId());				
-				setReplicationFactor(rf);
-			}
-		};
-		automaticReplicationTimer.scheduleAtFixedRate(task, 0, 60000);
-    }    
-    
-    public void disableAutomaticReplication(){
-    	automaticReplicationTimer.cancel();
     }
 
     /**
