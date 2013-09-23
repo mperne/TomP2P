@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Timer;
-import java.util.TimerTask;
 
 import net.tomp2p.connection2.Bindings;
 import net.tomp2p.connection2.ChannelClientConfiguration;
@@ -50,7 +49,6 @@ import net.tomp2p.rpc.PeerExchangeRPC;
 import net.tomp2p.rpc.PingRPC;
 import net.tomp2p.rpc.QuitRPC;
 import net.tomp2p.rpc.StorageRPC;
-import net.tomp2p.rpc.SynchronizationRPC;
 //import net.tomp2p.rpc.TaskRPC;
 import net.tomp2p.rpc.TrackerRPC;
 import net.tomp2p.storage.IdentityManagement;
@@ -120,6 +118,8 @@ public class PeerMaker {
     
     private MaintenanceTask maintenanceTask = null;
     
+    private ReplicationExecutor replicationExecutor = null;
+    
     private List<AutomaticFuture> automaticFutures = null;
 
     // private ReplicationExecutor replicationExecutor;
@@ -147,7 +147,6 @@ public class PeerMaker {
     private boolean enableDirectDataRPC = true;
     private boolean enableTrackerRPC = true;
     private boolean enableTaskRPC = true;
-    private boolean enableSynchronizationRPC = true;
 
     // P2P
     private boolean enableRouting = true;
@@ -229,7 +228,7 @@ public class PeerMaker {
             peerStatusListeners = new PeerStatusListener[] { peerMap };
         }
         
-        if (timer == null) {
+        if (masterPeer == null && timer == null) {
             timer = new Timer();
         }
 
@@ -288,9 +287,18 @@ public class PeerMaker {
         if(maintenanceTask == null) {
             maintenanceTask = new MaintenanceTask();
         }
-        maintenanceTask.init(peer, timer);
+        maintenanceTask.init(peer, connectionBean.timer());
         maintenanceTask.addMaintainable(peerMap);
         peerBean.maintenanceTask(maintenanceTask);
+        
+        // indirect replication
+        if(replicationExecutor == null && isEnableIndirectReplication() && isEnableStorageRPC()) {
+            replicationExecutor = new ReplicationExecutor(peer); 
+        }
+        if (replicationExecutor != null) {
+            replicationExecutor.init(peer, connectionBean.timer());
+        }
+        peerBean.replicationExecutor(replicationExecutor);
         
         if(automaticFutures!=null) {
             peer.setAutomaticFutures(automaticFutures);
@@ -377,11 +385,6 @@ public class PeerMaker {
             BroadcastRPC broadcastRPC = new BroadcastRPC(peerBean, connectionBean, broadcastHandler);
             peer.setBroadcastRPC(broadcastRPC);
         }
-        
-        if (isEnableSynchronizationRPC()) {
-        	SynchronizationRPC synchronizationRPC = new SynchronizationRPC(peerBean, connectionBean);
-        	peer.setSynchronizationRPC(synchronizationRPC);
-        }
          
     }
 
@@ -413,21 +416,7 @@ public class PeerMaker {
          * again //connectionHandler // .getConnectionBean() // .getScheduler() //
          * .startMaintainance(peerBean.getPeerMap(), peer.getHandshakeRPC(), //
          * connectionBean.getConnectionReservation(), 5); } 
-         */
-         // indirect replication //TODO: enable again //
-        if (isEnableIndirectReplication() && isEnableStorageRPC()) { 
-        	//if (replicationExecutor == null) { //
-        		final ReplicationExecutor replicationExecutor = new ReplicationExecutor(peer);
-        		connectionBean.timer().scheduleAtFixedRate(new TimerTask() {
-					
-					@Override
-					public void run() {
-						replicationExecutor.run();
-						
-					}
-				}, 1000, 60 * 1000);
-        }
-         
+         */ 
     }
 
     public Number160 peerId() {
@@ -547,6 +536,26 @@ public class PeerMaker {
         this.bloomfilterFactory = bloomfilterFactory;
         return this;
     }
+    
+    public MaintenanceTask maintenanceTask() {
+        return maintenanceTask;
+    }
+
+    public PeerMaker maintenanceTask(MaintenanceTask maintenanceTask) {
+        this.maintenanceTask = maintenanceTask;
+        return this;
+    }
+    
+    public ReplicationExecutor replicationExecutor() {
+        return replicationExecutor;
+    }
+
+    public PeerMaker replicationExecutor(ReplicationExecutor replicationExecutor) {
+        this.replicationExecutor = replicationExecutor;
+        return this;
+    }
+    
+    // isEnabled methods
 
     public boolean isEnableHandShakeRPC() {
         return enableHandShakeRPC;
@@ -619,15 +628,6 @@ public class PeerMaker {
         this.enableTaskRPC = enableTaskRPC;
         return this;
     }
-    
-    public boolean isEnableSynchronizationRPC() {
-        return enableQuitRPC;
-    }
-
-    public PeerMaker setEnableSynchronizationRPC(boolean enableQuitRPC) {
-        this.enableQuitRPC = enableQuitRPC;
-        return this;
-    }    
 
     public boolean isEnableRouting() {
         return enableRouting;
