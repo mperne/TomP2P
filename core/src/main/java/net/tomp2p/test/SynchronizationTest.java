@@ -1,0 +1,277 @@
+package net.tomp2p.test;
+
+import static org.junit.Assert.*;
+
+import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Random;
+
+import net.tomp2p.futures.FutureDHT;
+import net.tomp2p.p2p.Peer;
+import net.tomp2p.p2p.PeerMaker;
+import net.tomp2p.p2p.builder.PutBuilder;
+import net.tomp2p.peers.Number160;
+import net.tomp2p.peers.Number480;
+import net.tomp2p.replication.Checksum;
+import net.tomp2p.replication.Instruction;
+import net.tomp2p.replication.Synchronization;
+import net.tomp2p.storage.Data;
+
+import org.hamcrest.Matcher;
+import org.junit.Test;
+
+public class SynchronizationTest {
+
+	@Test
+	public void testGetAdler() throws IOException {
+		Synchronization sync = new Synchronization();
+		
+		String str = "Zurich";
+		int a = (int)'Z' + (int)'u' + (int)'r' + (int)'i' + (int)'c' + (int)'h';
+		int b = 6*(int)'Z' + 5*(int)'u' + 4*(int)'r' + 3*(int)'i' + 2*(int)'c' + 1*(int)'h';
+		
+		a %= 65536;
+		b %= 65536;
+		
+		int expectedValue = a + 65536*b;
+		
+		assertEquals(expectedValue, sync.getAdler(0, 5, str.getBytes()));
+	}
+
+	@Test
+	public void testGetMD5() throws IOException, NoSuchAlgorithmException {
+		Synchronization sync = new Synchronization();
+		String block = "The quick brown fox jumps over the lazy dog";		
+		String expected = "9e107d9d372bb6826bd81d3542a419d6";
+
+		assertArrayEquals(expected.getBytes(), sync.getMD5(block.getBytes()));
+	}	
+
+	@Test
+	public void testGetOffset() throws IOException, NoSuchAlgorithmException {
+		Synchronization sync = new Synchronization();
+		byte[] b = new byte[5];
+		b[0] = 10;
+		b[1] = 11;
+		b[2] = 12;
+		b[3] = 13;
+		b[4] = 14;
+		
+		byte[] expected = new byte[3];
+		expected[0] = 11;
+		expected[1] = 12;
+		expected[2] = 13;
+
+		assertArrayEquals(expected, sync.getOffset(1, 3, b));
+	}	
+
+	@Test
+	public void testGetChecksums() throws NoSuchAlgorithmException, IOException {
+		Synchronization sync = new Synchronization();
+		
+		int size=7;
+		String value="SwitzerlandZurich";
+		
+		ArrayList<Checksum> expected = new ArrayList<Checksum>();
+		Checksum ch1 = new Checksum();
+		Checksum ch2 = new Checksum();
+		Checksum ch3 = new Checksum();
+		ch1.setWeakChecksum(sync.getAdler(0,6,"Switzer".getBytes()));
+		ch1.setStrongChecksum(sync.getMD5("Switzer".getBytes()));
+		ch2.setWeakChecksum(sync.getAdler(0,6,"landZur".getBytes()));
+		ch2.setStrongChecksum(sync.getMD5("landZur".getBytes()));
+		ch3.setWeakChecksum(sync.getAdler(0,2,"ich".getBytes()));
+		ch3.setStrongChecksum(sync.getMD5("ich".getBytes()));
+		
+		expected.add(ch1);
+		expected.add(ch2);
+		expected.add(ch3);
+		
+		System.out.println("------------------------------------------------------");
+		for(int i=0; i<expected.size(); i++){
+			System.out.print(expected.get(i).getWeakChecksum()+":");
+			for(int j=0; j<expected.get(i).getStrongChecksum().length; j++)
+				System.out.print(expected.get(i).getStrongChecksum()[j]);
+			System.out.println();
+		}
+		
+		ArrayList<Checksum> actual = sync.getChecksums(value.getBytes(), size);
+		for(int i=0; i<actual.size(); i++){
+			System.out.print(actual.get(i).getWeakChecksum()+"?");
+			for(int j=0; j<actual.get(i).getStrongChecksum().length; j++)
+				System.out.print(actual.get(i).getStrongChecksum()[j]);
+			System.out.println();
+		}
+		
+ 		assertEquals(expected, sync.getChecksums(value.getBytes(), size));
+	}	
+
+	@Test
+	public void testMatches() throws IOException, NoSuchAlgorithmException {
+		Synchronization sync = new Synchronization();
+		
+		int size = 6;
+		String oldValue = "ZurichGenevaLuganoAAA";
+
+		ArrayList<Checksum> checksums = sync.getChecksums(oldValue.getBytes(), size);		
+		byte[] offset = "Geneva".getBytes();
+		int wcs = sync.getAdler(0, 5, offset);
+		
+		Instruction expected = new Instruction();
+		expected.setReference(1);
+		
+		System.out.println("----------------------------------");
+		System.out.println(expected.getReference());
+		System.out.println(expected.getLiteral());
+		System.out.println(sync.matches(wcs, offset, checksums).getReference());
+		System.out.println(sync.matches(wcs, offset, checksums).getLiteral());
+
+		assertEquals(expected, sync.matches(wcs, offset, checksums));
+	}	
+
+	@Test
+	public void testGetDiff() throws IOException, NoSuchAlgorithmException {
+		Synchronization sync = new Synchronization();
+		
+		String newValue = "AzurichGenevaLuganoAbbLuganoAAA";
+		String diff = "ichGen";
+		
+		Instruction expected = new Instruction();
+		expected.setLiteral(diff.getBytes());
+		
+		System.out.println("----------------------------------");
+		System.out.println(expected.getReference());
+		System.out.println(expected.getLiteral());
+		System.out.println(sync.getDiff(5, 10, newValue.getBytes()).getReference());
+		System.out.println(sync.getDiff(5, 10, newValue.getBytes()).getLiteral());
+
+		assertEquals(expected, sync.getDiff(5, 10, newValue.getBytes()));
+	}	
+	
+	@Test
+	public void testGetInstructions() throws IOException, NoSuchAlgorithmException {
+		Synchronization sync = new Synchronization();
+		
+		int size = 6;
+		String oldValue = "ZurichGenevaLuganoAAA";
+		String newValue = "AzurichGenevaLuganoAbbLuganoAAA";
+
+		ArrayList<Checksum> checksums = sync.getChecksums(oldValue.getBytes(), size);		
+//		for(int i=0; i<checksums.size(); i++){
+//			System.out.print(checksums.get(i).getWeakChecksum()+":");
+//			for(int j=0; j<checksums.get(i).getStrongChecksum().length; j++)
+//				System.out.print(checksums.get(i).getStrongChecksum()[j]);
+//			System.out.println();
+//		}
+ 		
+ 		ArrayList<Instruction> expected = new ArrayList<Instruction>();
+ 		Instruction ins1 = new Instruction();
+ 		Instruction ins2 = new Instruction();
+ 		Instruction ins3 = new Instruction();
+ 		Instruction ins4 = new Instruction();
+ 		Instruction ins5 = new Instruction();
+ 		Instruction ins6 = new Instruction();
+ 		ins1.setLiteral("Azurich".getBytes());
+ 		ins2.setReference(1);
+ 		ins3.setReference(2);
+ 		ins4.setLiteral("Abb".getBytes());
+ 		ins5.setReference(2);
+ 		ins6.setReference(3);
+ 		
+ 		expected.add(ins1);
+ 		expected.add(ins2);
+ 		expected.add(ins3);
+ 		expected.add(ins4);
+ 		expected.add(ins5);
+ 		expected.add(ins6);
+ 		
+ 		System.out.println("--------------------------------------------------");
+ 		for(int i=0; i<expected.size(); i++){
+ 			System.out.print(expected.get(i).getReference()+":");
+ 			if(expected.get(i).getLiteral()!=null)
+ 				for(int j=0; j<expected.get(i).getLiteral().length; j++)
+ 					System.out.print(expected.get(i).getLiteral()[j]);
+ 			else System.out.print("null");
+ 			System.out.println();
+ 		}
+ 		
+ 		ArrayList<Instruction> actual = sync.getInstructions(newValue.getBytes(), checksums, size);
+ 		for(int i=0; i<actual.size(); i++){
+ 			System.out.print(actual.get(i).getReference()+":");
+ 			if(actual.get(i).getLiteral()!=null)
+ 				for(int j=0; j<actual.get(i).getLiteral().length; j++)
+ 					System.out.print(actual.get(i).getLiteral()[j]);
+ 			else System.out.print("null");
+ 			System.out.println();
+ 		}
+ 		
+ 		assertEquals(expected, sync.getInstructions(newValue.getBytes(), checksums, size)); 		
+	}	
+	
+	@Test
+	public void testGetReconstructedValueStatic() throws IOException, NoSuchAlgorithmException {
+		// oldValue and newValue are set manually
+		Synchronization sync = new Synchronization();
+		int size = 6;
+		String oldValue = "ZurichGenevaLuganoAAA";
+		String newValue = "AzurichGenevaLuganoAbbLuganoAAA";
+ 		ArrayList<Checksum> checksums = sync.getChecksums(oldValue.getBytes(), size);
+ 		ArrayList<Instruction> instructions = sync.getInstructions(newValue.getBytes(), checksums, size);
+ 		
+ 		byte[] reconstructedValue = sync.getReconstructedValue(oldValue.getBytes(), instructions, size);
+ 		
+ 		assertArrayEquals(newValue.getBytes(), reconstructedValue);		
+	}	
+
+	@Test
+	public void testGetReconstructedValueDynamic() throws IOException, NoSuchAlgorithmException {
+		Synchronization sync = new Synchronization();
+		
+		int k = 1000;
+		int m = 3;  // character types number, m different characters are used to construct content
+		//int l = 2;	// number of changes, so l characters of content will be changed
+				
+		Random random = new Random();
+		int l = random.nextInt(k/20)+1;
+		int size = random.nextInt(k/15);
+		//int size = 3;
+		System.out.print("character types: "+m+" - ");
+		for(int i=0; i<3; i++)
+			System.out.print(" "+(char)(i+65));
+		System.out.println();
+		System.out.println("changes: "+l);
+		System.out.println("content size: "+k);
+		System.out.println("block size: "+size);
+		
+		String oldValue = "";
+		StringBuilder sb = new StringBuilder(k);
+		for (int i=0; i<k; i++) {
+			int temp = random.nextInt(m);
+		    sb.append((char)(temp+65));
+		}
+		oldValue = sb.toString();
+		System.out.println("oldvalue.length="+oldValue.length());
+		System.out.println("old value: "+oldValue);
+		
+		String newValue = oldValue;
+		for(int i=0; i<l; i++){
+			int temp = random.nextInt(k);
+			StringBuilder sb1 = new StringBuilder(newValue);
+			sb1.setCharAt(temp, 'X');			
+			newValue = sb1.toString();
+		}
+		System.out.println("new value: "+newValue);
+ 		
+		ArrayList<Checksum> checksums = sync.getChecksums(oldValue.getBytes(), size);
+		ArrayList<Instruction> instructions = sync.getInstructions(newValue.getBytes(), checksums, size);
+ 		System.out.println("checksums("+checksums.size()+"): "+checksums);
+ 		System.out.println("instructions("+instructions.size()+"): "+instructions);
+		
+ 		byte[] reconstructedValue = sync.getReconstructedValue(oldValue.getBytes(), instructions, size);
+ 		
+ 		assertArrayEquals(newValue.getBytes(), reconstructedValue);
+	}	
+}
