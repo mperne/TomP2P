@@ -72,6 +72,23 @@ public class Synchronization {
 		return a+65536*b;
 	}	
 	
+	public int[] getAdlerNew(int start, int end, byte[] offset){
+		int len = end-start+1;
+		int a=0, b=0;
+		for(int i=0; i<len; i++){
+			a += (int)offset[start+i];
+			b += (len-i)*(int)offset[start+i];
+		}
+		a = a % 65536;
+		b = b % 65536;
+		//return a+65536*b;
+		int[] result = new int[3];
+		result[0] = a;
+		result[1] = b;
+		result[2] = a+65536*b;
+		return result;
+	}
+	
 	/**
 	 * It returns MD5 hash for the offset
 	 * 
@@ -191,6 +208,107 @@ public class Synchronization {
 		instruction.setLiteral(literal);
 		return instruction;
 	}
+	
+	public int[] jump(int offset, int blockSize, byte[] newValue) {
+		int[] result = new int[2];
+		if(offset+blockSize>=newValue.length){
+			result[0] = getAdlerNew(offset-1, newValue.length-1, newValue)[0];
+			result[1] = getAdlerNew(offset-1, newValue.length-1, newValue)[1];
+		}
+		else{
+			result[0] = getAdlerNew(offset-1, offset+blockSize-2, newValue)[0];
+			result[1] = getAdlerNew(offset-1, offset+blockSize-2, newValue)[1];
+		}
+		return result;
+	}
+	
+	public ArrayList<Instruction> test(byte[] newValue, ArrayList<Checksum> checksums, int blockSize) throws NoSuchAlgorithmException {
+		ArrayList<Instruction> result = new ArrayList<Instruction>();
+		int a = getAdlerNew(0, blockSize-1, newValue)[0];
+		int b = getAdlerNew(0, blockSize-1, newValue)[1];
+		int wcs = getAdlerNew(0, blockSize-1, newValue)[2];
+		
+		int offset = 0;
+		int diff = 0;
+		Instruction instruction = matches(wcs, getOffset(0, blockSize-1, newValue), checksums);
+		if(instruction!=null){
+			result.add(instruction);
+			offset = blockSize;
+			diff = blockSize;
+			a = jump(offset, blockSize, newValue)[0];
+			b = jump(offset, blockSize, newValue)[1];
+//			if(offset+blockSize>=newValue.length){
+//				a = getAdlerNew(offset-1, newValue.length-1, newValue)[0];
+//				b = getAdlerNew(offset-1, newValue.length-1, newValue)[1];
+//			}
+//			else{
+//				a = getAdlerNew(offset-1, offset+blockSize-2, newValue)[0];
+//				b = getAdlerNew(offset-1, offset+blockSize-2, newValue)[1];
+//			}
+		}
+		else{
+			offset = 1;
+		}
+		result = test(result, diff, offset, a, b, newValue, checksums, blockSize);
+		return result;
+	}
+	
+	public ArrayList<Instruction> test(ArrayList<Instruction> result, int diff, int offset, int a, int b, byte[] newValue, ArrayList<Checksum> checksums, int blockSize) throws NoSuchAlgorithmException {
+		int wcs;
+		if(offset+blockSize>=newValue.length) {
+			wcs = getAdlerNew(offset, newValue.length-1, newValue)[2];
+			Instruction instruction1 = matches(wcs, getOffset(offset, newValue.length-1, newValue), checksums);
+			if(instruction1!=null){
+				if(diff<offset) 
+					result.add(getDiff(diff,offset-1,newValue));
+				result.add(instruction1);
+			}
+			else{
+				offset++;
+				if(offset>=newValue.length){
+					if(diff<offset) {
+						result.add(getDiff(diff,newValue.length-1,newValue));
+					}
+					return result;
+				}
+				else
+					test(result, diff, offset, a, b, newValue, checksums, blockSize);
+			}
+			return result;
+		}
+
+		
+		a = (a-newValue[offset-1]+newValue[offset+blockSize-1]) % 65536;
+		b = (b-blockSize*newValue[offset-1]+a) % 65536;
+		wcs = a + 65536 * b;
+
+		Instruction instruction1 = matches(wcs, getOffset(offset, offset+blockSize-1, newValue), checksums);
+		if(instruction1!=null){
+			if(diff<offset) 
+				result.add(getDiff(diff, offset-1, newValue));
+			result.add(instruction1);
+			diff = offset + blockSize;
+			offset = offset + blockSize;
+			a = jump(offset, blockSize, newValue)[0];
+			b = jump(offset, blockSize, newValue)[1];
+//			if(offset+blockSize>=newValue.length){
+//				a = getAdlerNew(offset-1, newValue.length-1, newValue)[0];
+//				b = getAdlerNew(offset-1, newValue.length-1, newValue)[1];
+//			}
+//			else{
+//				a = getAdlerNew(offset-1, offset+blockSize-2, newValue)[0];
+//				b = getAdlerNew(offset-1, offset+blockSize-2, newValue)[1];
+//			}
+			test(result, diff, offset, a, b, newValue, checksums, blockSize);
+		}
+		else{
+			offset++;
+			test(result, diff, offset, a, b, newValue, checksums, blockSize);
+		}
+		
+		return result;
+	}
+	
 	
 	/**
 	 * It returns the sequence of instructions each of which contains either reference to a block or literal data.
