@@ -289,104 +289,143 @@ final public class Synchronization {
         return reconstructedValue;
     }
 
-    public static Buffer getBuffer(Object object) throws IOException {
-        return new Buffer(Unpooled.wrappedBuffer(Utils.encodeJavaObject(object)));
-    }
+//    public static Buffer getBuffer(Object object) throws IOException {
+//        return new Buffer(Unpooled.wrappedBuffer(Utils.encodeJavaObject(object)));
+//    }
+//
+//    public static Object getObject(Buffer buffer) throws IOException, ClassNotFoundException {
+//        return buffer.object();
+//    }
 
-    public static Object getObject(Buffer buffer) throws IOException, ClassNotFoundException {
-        return buffer.object();
+//    public static byte[] intToByteArray1(int value){
+//    	byte[] b = {(byte)(value>>>24), (byte)(value>>>16), (byte)(value>>>8), (byte)value};
+//    	return b;
+//    }
+    
+    public static byte[] intToByteArray(int value) {
+    	byte[] b = new byte[4];
+    	for (int i = 0; i < 4; i++) {
+    		int offset = (b.length - 1 - i) * 8;
+    		b[i] = (byte) ((value >>> offset) & 0xFF);
+    	}
+    	return b;
     }
-
-    @SuppressWarnings("unchecked")
-	public static ArrayList<Checksum> decodeChecksumList(byte[] bytes) {
-    	Object object = null;
-    	try {
-			object = Utils.decodeJavaObject(Unpooled.wrappedBuffer(bytes));
-		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-        return (ArrayList<Checksum>)object;
+    
+    public static int byteArrayToInt(byte[] b){
+        int value = 0;
+        for (int i = 0; i < 4; i++) {
+            int shift = (4 - 1 - i) * 8;
+            value += (b[i] & 0x000000FF) << shift;
+        }
+        return value;
     }
     
     public static byte[] encodeChecksumList(ArrayList<Checksum> checksums) {
-    	byte[] encodedChecksums = null;
-		try {
-			encodedChecksums = Utils.encodeJavaObject(checksums);
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-
-    	return encodedChecksums;
+    	int size = checksums.size();
+    	byte[] array = new byte[4+size*20];
+    	byte[] info = intToByteArray(size);
+    	System.arraycopy(info, 0, array, 0, 4);
+    	for(int i=0; i<size; i++){
+    		byte[] weakChecksum = intToByteArray(checksums.get(i).getWeakChecksum());
+    		System.arraycopy(weakChecksum, 0, array, 20*i+4, 4);
+    		System.arraycopy(checksums.get(i).getStrongChecksum(), 0, array, 20*i+8, 16);
+    	}
+    	return array;
     }
 
+	public static ArrayList<Checksum> decodeChecksumList(byte[] bytes) {
+		ArrayList<Checksum> checksums = new ArrayList<Checksum>();
+    	byte[] info = new byte[4];
+    	System.arraycopy(bytes, 0, info, 0, 4);
+    	int size = byteArrayToInt(info);
+    	for(int i=0; i<size; i++){
+    		Checksum checksum = new Checksum();
+    		byte[] weakChecksum = new byte[4];
+    		System.arraycopy(bytes, 20*i+4, weakChecksum, 0, 4);
+    		checksum.setWeakChecksum(byteArrayToInt(weakChecksum));
+    		byte[] strongChecksum = new byte[16];
+    		System.arraycopy(bytes, 20*i+8, strongChecksum, 0, 16);
+    		checksum.setStrongChecksum(strongChecksum);
+    		checksums.add(checksum);
+    	}
+        return checksums;
+    }
+    
 	public static byte[] encodeInstructionList(ArrayList<Instruction> instructions, Number160 number160) {
-    	byte[] encodedNumber160 = null;
-    	byte[] encodedInstructions = null;
-//    	Object[] object = new Object[2];
-//    	
-//    	object[0] = number160;
-//    	object[1] = instructions;
-//    	Object object1 = number160;
-//    	Object object2 = instructions;
-//    	Object object = null;
-    	    	
-    	try {
-    		encodedNumber160 = Utils.encodeJavaObject(number160);
-			encodedInstructions = Utils.encodeJavaObject(instructions);
-		} catch (IOException e) {
-			e.printStackTrace();
+		int size = instructions.size();
+		int length = 0;
+		ArrayList<Integer> literalSize = new ArrayList<Integer>();
+		for(int i=0; i<size; i++) {
+			int temp = instructions.get(i).literalSize();
+			length += temp;
+			literalSize.add(temp);
 		}
-    	
-    	System.out.println("lenght "+encodedInstructions.length+" "+encodedNumber160.length);
-//    	
-    	byte[] result = new byte[encodedNumber160.length + encodedInstructions.length];
-    	System.arraycopy(encodedNumber160, 0, result, 0, encodedNumber160.length);
-    	System.arraycopy(encodedInstructions, 0, result, encodedNumber160.length, encodedInstructions.length);
-    	
-//    	for(int i=0; i<encodedNumber160.length; i++)
-//    		result[i] = encodedNumber160[i];
-//    	
-//    	System.out.println();
-//    	System.out.println();
-//    	for(int i=encodedNumber160.length; i< encodedInstructions.length+encodedNumber160.length; i++)
-//    		result[i] = encodedInstructions[i];
-//    	
-//    	System.out.println();
-//    	System.out.println();
-    	
-    	System.out.println("length "+result.length);
-    	
-        return result;
+		
+		byte[] array = new byte[20+4+8*size+length]; // 20 - Number160, 4 - number of instructions, 8 - size of each  instruction and reference, length - all literals
+		byte[] hash = number160.toByteArray();
+		System.arraycopy(hash, 0, array, 0, 20);
+		byte[] info = intToByteArray(size);
+		System.arraycopy(info, 0, array, 20, 4);
+		
+		for(int i=0; i<size; i++) {
+			System.arraycopy(intToByteArray(literalSize.get(i)), 0, array, 4*i+24, 4);
+		}
+		
+		int nextPosition = 4*size+24;
+		
+		int shift = 0;
+		for(int i=0; i<size; i++) {
+			byte[] reference =intToByteArray(instructions.get(i).getReference());
+			System.arraycopy(reference, 0, array, nextPosition+shift, 4);
+			if(literalSize.get(i)!=0)
+				System.arraycopy(instructions.get(i).getLiteral(), 0, array, nextPosition+shift+4, literalSize.get(i));
+			shift += literalSize.get(i)+4;
+		}
+		
+        return array;
     }
 
-    @SuppressWarnings("unchecked")
 	public static ArrayList<Instruction> decodeInstructionList(byte[] bytes) {
-    	byte[] instructions = new byte[bytes.length-160];
-    	for(int i=160; i<bytes.length-160; i++)
-    		instructions[i] = bytes[i];
-    	Object object = null;
-    	try {
-			object = Utils.decodeJavaObject(bytes,160,bytes.length);
-		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
+		ArrayList<Instruction> instructions = new ArrayList<Instruction>();
+		byte[] info = new byte[4];
+		System.arraycopy(bytes, 20, info, 0, 4);
+		int size = byteArrayToInt(info);
+		
+		ArrayList<Integer> literalSize = new ArrayList<Integer>();
+		for(int i=0; i<size; i++) {
+			byte[] temp = new byte[4];
+			System.arraycopy(bytes, 4*i+24, temp, 0, 4);
+			literalSize.add(byteArrayToInt(temp));
 		}
-        return (ArrayList<Instruction>)object;    	
+		
+		int nextPosition = 4*size+24;
+		int shift = 0;
+		
+		for(int i=0; i<size; i++) {
+			Instruction instruction = new Instruction();
+			byte[] reference = new byte[4];
+			System.arraycopy(bytes, nextPosition+shift, reference, 0, 4);
+			int referenceValue = byteArrayToInt(reference);
+			if(referenceValue!=-1){
+				instruction.setReference(referenceValue);
+			}
+			else {
+				byte[] literal = new byte[literalSize.get(i)];
+				System.arraycopy(bytes, nextPosition+shift+4, literal, 0, literalSize.get(i));
+				instruction.setLiteral(literal);
+			}
+			shift += literalSize.get(i)+4;
+			instructions.add(instruction);			
+		}
+		
+		return instructions;   	
     }
 
     public static Number160 decodeHash(byte[] bytes) {
-    	Object object = null;
-    	try {
-			object = Utils.decodeJavaObject(bytes,0,160);
-		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-        return (Number160)object; 
+    	byte[] number160 = new byte[20];
+    	System.arraycopy(bytes, 0, number160, 0, 20);
+    	
+    	return new Number160(number160);
     }
 
 }
