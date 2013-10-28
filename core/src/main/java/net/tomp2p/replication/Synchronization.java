@@ -16,13 +16,9 @@
 
 package net.tomp2p.replication;
 
-import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.ObjectOutput;
-import java.io.ObjectOutputStream;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -94,6 +90,7 @@ final public class Synchronization {
             int remaining = blockSize;
             if (i == numberOfBlocks - 1) {
                 remaining = value.length % blockSize;
+                if(remaining==0) remaining = blockSize;
             }
 
             Checksum checksum = new Checksum();
@@ -153,7 +150,7 @@ final public class Synchronization {
     }
 
     private static int[] jump(int offset, int blockSize, byte[] newValue) {
-        if (offset + blockSize >= newValue.length) {
+        if (offset + blockSize > newValue.length) {
             return getAdlerInternal(newValue, offset - 1, newValue.length - 1);
         } else {
             return getAdlerInternal(newValue, offset - 1, offset + blockSize - 2);
@@ -259,7 +256,8 @@ final public class Synchronization {
     public static byte[] getReconstructedValue(byte[] oldValue, ArrayList<Instruction> instructions, int blockSize) {
 
         final int numberOfBlocks = (oldValue.length + blockSize - 1) / blockSize;
-        final int remainigSize = oldValue.length % blockSize;
+        int remainingSize = oldValue.length % blockSize;
+        if(remainingSize==0) remainingSize = blockSize;
 
         // calculate the new size of the data
         int newSize = 0;
@@ -267,7 +265,7 @@ final public class Synchronization {
             if (instruction.getReference() == -1) {
                 newSize += instruction.getLiteral().length;
             } else {
-                newSize += (instruction.getReference() == numberOfBlocks - 1) ? remainigSize : blockSize;
+                newSize += (instruction.getReference() == numberOfBlocks - 1) ? remainingSize : blockSize;
             }
         }
         byte[] reconstructedValue = new byte[newSize];
@@ -280,7 +278,7 @@ final public class Synchronization {
                 System.arraycopy(instruction.getLiteral(), 0, reconstructedValue, offset, len);
 
             } else {
-                len = (instruction.getReference() == numberOfBlocks - 1) ? remainigSize : blockSize;
+                len = (instruction.getReference() == numberOfBlocks - 1) ? remainingSize : blockSize;
                 int reference = instruction.getReference();
                 System.arraycopy(oldValue, reference * blockSize, reconstructedValue, offset, len);
             }
@@ -289,26 +287,21 @@ final public class Synchronization {
         return reconstructedValue;
     }
 
-//    public static Buffer getBuffer(Object object) throws IOException {
-//        return new Buffer(Unpooled.wrappedBuffer(Utils.encodeJavaObject(object)));
-//    }
-//
-//    public static Object getObject(Buffer buffer) throws IOException, ClassNotFoundException {
-//        return buffer.object();
-//    }
+    public Buffer getBuffer(Object object) throws IOException {
+        return new Buffer(Unpooled.wrappedBuffer(Utils.encodeJavaObject(object)));
+    }
 
-//    public static byte[] intToByteArray1(int value){
-//    	byte[] b = {(byte)(value>>>24), (byte)(value>>>16), (byte)(value>>>8), (byte)value};
-//    	return b;
-//    }
-    
+    public Object getObject(Buffer buffer) throws IOException, ClassNotFoundException {
+        return buffer.object();
+    }
+
     public static byte[] intToByteArray(int value) {
-    	byte[] b = new byte[4];
-    	for (int i = 0; i < 4; i++) {
-    		int offset = (b.length - 1 - i) * 8;
-    		b[i] = (byte) ((value >>> offset) & 0xFF);
-    	}
-    	return b;
+        byte[] b = new byte[4];
+        for (int i = 0; i < 4; i++) {
+            int offset = (b.length - 1 - i) * 8;
+            b[i] = (byte) ((value >>> offset) & 0xFF);
+        }
+        return b;
     }
     
     public static int byteArrayToInt(byte[] b){
@@ -321,111 +314,111 @@ final public class Synchronization {
     }
     
     public static byte[] encodeChecksumList(ArrayList<Checksum> checksums) {
-    	int size = checksums.size();
-    	byte[] array = new byte[4+size*20];
-    	byte[] info = intToByteArray(size);
-    	System.arraycopy(info, 0, array, 0, 4);
-    	for(int i=0; i<size; i++){
-    		byte[] weakChecksum = intToByteArray(checksums.get(i).getWeakChecksum());
-    		System.arraycopy(weakChecksum, 0, array, 20*i+4, 4);
-    		System.arraycopy(checksums.get(i).getStrongChecksum(), 0, array, 20*i+8, 16);
-    	}
-    	return array;
-    }
-
-	public static ArrayList<Checksum> decodeChecksumList(byte[] bytes) {
-		ArrayList<Checksum> checksums = new ArrayList<Checksum>();
-    	byte[] info = new byte[4];
-    	System.arraycopy(bytes, 0, info, 0, 4);
-    	int size = byteArrayToInt(info);
-    	for(int i=0; i<size; i++){
-    		Checksum checksum = new Checksum();
-    		byte[] weakChecksum = new byte[4];
-    		System.arraycopy(bytes, 20*i+4, weakChecksum, 0, 4);
-    		checksum.setWeakChecksum(byteArrayToInt(weakChecksum));
-    		byte[] strongChecksum = new byte[16];
-    		System.arraycopy(bytes, 20*i+8, strongChecksum, 0, 16);
-    		checksum.setStrongChecksum(strongChecksum);
-    		checksums.add(checksum);
-    	}
-        return checksums;
-    }
-    
-	public static byte[] encodeInstructionList(ArrayList<Instruction> instructions, Number160 number160) {
-		int size = instructions.size();
-		int length = 0;
-		ArrayList<Integer> literalSize = new ArrayList<Integer>();
-		for(int i=0; i<size; i++) {
-			int temp = instructions.get(i).literalSize();
-			length += temp;
-			literalSize.add(temp);
-		}
-		
-		byte[] array = new byte[20+4+8*size+length]; // 20 - Number160, 4 - number of instructions, 8 - size of each  instruction and reference, length - all literals
-		byte[] hash = number160.toByteArray();
-		System.arraycopy(hash, 0, array, 0, 20);
-		byte[] info = intToByteArray(size);
-		System.arraycopy(info, 0, array, 20, 4);
-		
-		for(int i=0; i<size; i++) {
-			System.arraycopy(intToByteArray(literalSize.get(i)), 0, array, 4*i+24, 4);
-		}
-		
-		int nextPosition = 4*size+24;
-		
-		int shift = 0;
-		for(int i=0; i<size; i++) {
-			byte[] reference =intToByteArray(instructions.get(i).getReference());
-			System.arraycopy(reference, 0, array, nextPosition+shift, 4);
-			if(literalSize.get(i)!=0)
-				System.arraycopy(instructions.get(i).getLiteral(), 0, array, nextPosition+shift+4, literalSize.get(i));
-			shift += literalSize.get(i)+4;
-		}
-		
+        int size = checksums.size();
+        byte[] array = new byte[4+size*20];
+        byte[] info = intToByteArray(size);
+        System.arraycopy(info, 0, array, 0, 4);
+        for(int i=0; i<size; i++){
+            byte[] weakChecksum = intToByteArray(checksums.get(i).getWeakChecksum());
+            System.arraycopy(weakChecksum, 0, array, 20*i+4, 4);
+            System.arraycopy(checksums.get(i).getStrongChecksum(), 0, array, 20*i+8, 16);
+        }
         return array;
     }
 
-	public static ArrayList<Instruction> decodeInstructionList(byte[] bytes) {
-		ArrayList<Instruction> instructions = new ArrayList<Instruction>();
-		byte[] info = new byte[4];
-		System.arraycopy(bytes, 20, info, 0, 4);
-		int size = byteArrayToInt(info);
-		
-		ArrayList<Integer> literalSize = new ArrayList<Integer>();
-		for(int i=0; i<size; i++) {
-			byte[] temp = new byte[4];
-			System.arraycopy(bytes, 4*i+24, temp, 0, 4);
-			literalSize.add(byteArrayToInt(temp));
-		}
-		
-		int nextPosition = 4*size+24;
-		int shift = 0;
-		
-		for(int i=0; i<size; i++) {
-			Instruction instruction = new Instruction();
-			byte[] reference = new byte[4];
-			System.arraycopy(bytes, nextPosition+shift, reference, 0, 4);
-			int referenceValue = byteArrayToInt(reference);
-			if(referenceValue!=-1){
-				instruction.setReference(referenceValue);
-			}
-			else {
-				byte[] literal = new byte[literalSize.get(i)];
-				System.arraycopy(bytes, nextPosition+shift+4, literal, 0, literalSize.get(i));
-				instruction.setLiteral(literal);
-			}
-			shift += literalSize.get(i)+4;
-			instructions.add(instruction);			
-		}
-		
-		return instructions;   	
+    public static ArrayList<Checksum> decodeChecksumList(byte[] bytes) {
+        ArrayList<Checksum> checksums = new ArrayList<Checksum>();
+        byte[] info = new byte[4];
+        System.arraycopy(bytes, 0, info, 0, 4);
+        int size = byteArrayToInt(info);
+        for(int i=0; i<size; i++){
+            Checksum checksum = new Checksum();
+            byte[] weakChecksum = new byte[4];
+            System.arraycopy(bytes, 20*i+4, weakChecksum, 0, 4);
+            checksum.setWeakChecksum(byteArrayToInt(weakChecksum));
+            byte[] strongChecksum = new byte[16];
+            System.arraycopy(bytes, 20*i+8, strongChecksum, 0, 16);
+            checksum.setStrongChecksum(strongChecksum);
+            checksums.add(checksum);
+        }
+        return checksums;
+    }
+    
+    public static byte[] encodeInstructionList(ArrayList<Instruction> instructions, Number160 number160) {
+        int size = instructions.size();
+        int length = 0;
+        ArrayList<Integer> literalSize = new ArrayList<Integer>();
+        for(int i=0; i<size; i++) {
+            int temp = instructions.get(i).literalSize();
+            length += temp;
+            literalSize.add(temp);
+        }
+        
+        byte[] array = new byte[20+4+8*size+length]; // 20 - Number160, 4 - number of instructions, 8 - size of each  instruction and reference, length - all literals
+        byte[] hash = number160.toByteArray();
+        System.arraycopy(hash, 0, array, 0, 20);
+        byte[] info = intToByteArray(size);
+        System.arraycopy(info, 0, array, 20, 4);
+        
+        for(int i=0; i<size; i++) {
+            System.arraycopy(intToByteArray(literalSize.get(i)), 0, array, 4*i+24, 4);
+        }
+        
+        int nextPosition = 4*size+24;
+        
+        int shift = 0;
+        for(int i=0; i<size; i++) {
+            byte[] reference =intToByteArray(instructions.get(i).getReference());
+            System.arraycopy(reference, 0, array, nextPosition+shift, 4);
+            if(literalSize.get(i)!=0)
+                System.arraycopy(instructions.get(i).getLiteral(), 0, array, nextPosition+shift+4, literalSize.get(i));
+            shift += literalSize.get(i)+4;
+        }
+        
+        return array;
+    }
+
+    public static ArrayList<Instruction> decodeInstructionList(byte[] bytes) {
+        ArrayList<Instruction> instructions = new ArrayList<Instruction>();
+        byte[] info = new byte[4];
+        System.arraycopy(bytes, 20, info, 0, 4);
+        int size = byteArrayToInt(info);
+        
+        ArrayList<Integer> literalSize = new ArrayList<Integer>();
+        for(int i=0; i<size; i++) {
+            byte[] temp = new byte[4];
+            System.arraycopy(bytes, 4*i+24, temp, 0, 4);
+            literalSize.add(byteArrayToInt(temp));
+        }
+        
+        int nextPosition = 4*size+24;
+        int shift = 0;
+        
+        for(int i=0; i<size; i++) {
+            Instruction instruction = new Instruction();
+            byte[] reference = new byte[4];
+            System.arraycopy(bytes, nextPosition+shift, reference, 0, 4);
+            int referenceValue = byteArrayToInt(reference);
+            if(referenceValue!=-1){
+                instruction.setReference(referenceValue);
+            }
+            else {
+                byte[] literal = new byte[literalSize.get(i)];
+                System.arraycopy(bytes, nextPosition+shift+4, literal, 0, literalSize.get(i));
+                instruction.setLiteral(literal);
+            }
+            shift += literalSize.get(i)+4;
+            instructions.add(instruction);          
+        }
+        
+        return instructions;    
     }
 
     public static Number160 decodeHash(byte[] bytes) {
-    	byte[] number160 = new byte[20];
-    	System.arraycopy(bytes, 0, number160, 0, 20);
-    	
-    	return new Number160(number160);
+        byte[] number160 = new byte[20];
+        System.arraycopy(bytes, 0, number160, 0, 20);
+        
+        return new Number160(number160);
     }
 
 }
